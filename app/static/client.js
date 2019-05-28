@@ -1,36 +1,92 @@
-var el = x => document.getElementById(x);
-
-function showPicker(inputId) { el('file-input').click(); }
+function showPicker() { $("#file-input").click(); }
 
 function showPicked(input) {
-    el('upload-label').innerHTML = input.files[0].name;
     var reader = new FileReader();
     reader.onload = function (e) {
-        el('image-picked').src = e.target.result;
-        el('image-picked').className = '';
+        $("#image-picked").attr("src", e.target.result);
+        $("#file-label").html(input.files[0].name);
+        $("#image-picked").removeClass("d-none");
+        clearProgress();
+        clearAlert();
     }
     reader.readAsDataURL(input.files[0]);
 }
 
-function analyze() {
-    var uploadFiles = el('file-input').files;
-    if (uploadFiles.length != 1) alert('Please select 1 file to analyze!');
-
-    el('analyze-button').innerHTML = 'Analyzing...';
-    var xhr = new XMLHttpRequest();
-    var loc = window.location
-    xhr.open('POST', `${loc.protocol}//${loc.hostname}:${loc.port}/analyze`, true);
-    xhr.onerror = function() {alert (xhr.responseText);}
-    xhr.onload = function(e) {
-        if (this.readyState === 4) {
-            var response = JSON.parse(e.target.responseText);
-            el('result-label').innerHTML = `Result = ${response['result']}`;
-        }
-        el('analyze-button').innerHTML = 'Analyze';
-    }
-
-    var fileData = new FormData();
-    fileData.append('file', uploadFiles[0]);
-    xhr.send(fileData);
+function clearAlert() {
+    $("#alert").addClass("d-none");
 }
 
+function showAlert(message) {
+    $("#alert").html(message).removeClass("d-none");
+}
+
+function displayLoading() {
+    $("#analyze-button-loading").removeClass("d-none");
+    $("#analyze-button").addClass("d-none");
+}
+
+function hideLoading() {
+    $("#analyze-button").removeClass("d-none");
+    $("#analyze-button-loading").addClass("d-none");
+}
+
+function clearProgress() {
+    setProgressValue($("#first"), "N/A", 0);
+    setProgressValue($("#second"), "N/A", 0);
+    setProgressValue($("#third"), "N/A", 0);
+}
+
+function setProgressValue(progressElement, predictedClass, predictionValue) {
+    value = Math.round(predictionValue*100);
+    progressElement.find("div").css("width", value+"%").attr("aria-valuenow", value);
+    progressElement.find("span").html(predictedClass + " (" + value + "%)");
+}
+
+function analyze() {
+    clearAlert();
+    
+    var uploadFiles = $("#file-input").prop("files");
+    if (uploadFiles.length != 1) {
+        showAlert("Please select 1 file to analyze!");
+        return;
+    }
+
+    displayLoading();
+    var xhr = new XMLHttpRequest();
+    var loc = window.location;
+    
+    if (loc.protocol=="file:") {
+        showAlert("Can not analyze locally :-(");
+        setTimeout(hideLoading, 1000);
+        setProgressValue($("#first"), "Some Class", 0.98);
+        setProgressValue($("#second"), "Other Class", 0.08);
+        setProgressValue($("#third"), "Any Class", 0.01);
+    } else {
+        xhr.open("POST", `${loc.protocol}//${loc.hostname}:${loc.port}/analyze`, true);
+        xhr.timeout = 25000; // timeout in ms
+        xhr.onerror = function() {
+            hideLoading();
+            showAlert("Error sending request :-(");
+        }
+        xhr.ontimeout = function() {
+            hideLoading();
+            showAlert("Request timed out :-(");
+        }
+        xhr.onload = function(e) {
+            if (this.readyState === 4) {
+                if (this.status === 200) {
+                    var response = JSON.parse(e.target.responseText);
+                    setProgressValue($("#first"), response['scores'][0][0], response['scores'][0][1]);
+                    setProgressValue($("#second"), response['scores'][1][0], response['scores'][1][1]);
+                    if(response['scores'].length > 2) setProgressValue($("#third"), response['scores'][2][0], response['scores'][2][1]);
+                } else {
+                    showAlert(`Request failed: ${this.statusText}`);
+                }
+            }
+            hideLoading();
+        }
+        var fileData = new FormData();
+        fileData.append("file", uploadFiles[0]);
+        xhr.send(fileData);
+    }
+}

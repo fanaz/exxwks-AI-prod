@@ -9,7 +9,7 @@ from fastai import *
 from fastai.vision import *
 
 model_file_url = 'http://fastmail.walura.eu/export.pkl'
-model_file_name = 'model'
+model_file_name = 'export'
 classes = ['0', '1', '2', '3', '4', '5']
 path = Path(__file__).parent
 
@@ -26,10 +26,7 @@ async def download_file(url, dest):
 
 async def setup_learner():
     await download_file(model_file_url, path/'models'/f'{model_file_name}.pth')
-    data_bunch = ImageDataBunch.single_from_classes(path, classes,
-        tfms=get_transforms(), size=224).normalize(imagenet_stats)
-    learn = cnn_learner(data_bunch, models.resnet34, pretrained=False)
-    learn.load(model_file_name)
+    learn = load_learner(path/'models',f'{model_file_name}.pth')
     return learn
 
 loop = asyncio.get_event_loop()
@@ -47,7 +44,15 @@ async def analyze(request):
     data = await request.form()
     img_bytes = await (data['file'].read())
     img = open_image(BytesIO(img_bytes))
-    return JSONResponse({'result': learn.predict(img)[0]})
+    prediction = learn.predict(img)
+    
+    filename = data['file'].filename
+    prediction_str = str(prediction[0])
+    
+    return JSONResponse({
+        'result': str(prediction[0]),
+        'scores': sorted(zip(learn.data.classes, map(float, prediction[2])), key=lambda p: p[1], reverse=True)
+    })
 
 if __name__ == '__main__':
     if 'serve' in sys.argv: uvicorn.run(app, host='0.0.0.0', port=8080)
