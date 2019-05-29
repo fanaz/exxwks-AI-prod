@@ -18,7 +18,7 @@ app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_headers=['X-Reques
 app.mount('/static', StaticFiles(directory='app/static'))
 
 async def download_file(url, dest):
-    if dest.exists(): return
+    #if dest.exists(): return
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             data = await response.read()
